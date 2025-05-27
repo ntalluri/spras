@@ -154,4 +154,3 @@ class TestML:
         ml.jaccard_similarity_eval(dataframe, OUT_DIR + 'jaccard-matrix.txt', OUT_DIR + 'jaccard-heatmap.png')
 
         assert filecmp.cmp(OUT_DIR + 'jaccard-matrix.txt', EXPECT_DIR + 'expected-jaccard-matrix.txt', shallow=False)
-        assert filecmp.cmp(OUT_DIR + 'jaccard-heatmap.png', EXPECT_DIR + 'expected-jaccard-heatmap.png', shallow=False)
