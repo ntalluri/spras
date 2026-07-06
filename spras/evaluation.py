@@ -475,6 +475,7 @@ class Evaluation:
                     plt.plot(recall_input_nodes, precision_input_nodes, color='black', marker='o', linestyle='--', label=f'Input Nodes Baseline')
 
                     # Dropping last elements because scikit-learn adds (1, 0) to precision/recall for plotting, not tied to real thresholds
+                    # https://scikit-learn.org/stable/modules/generated/sklearn.metrics.precision_recall_curve.html#sklearn.metrics.precision_recall_curve:~:text=Returns%3A-,precision,predictions%20with%20score%20%3E%3D%20thresholds%5Bi%5D%20and%20the%20last%20element%20is%200.,-thresholds
                     prc_input_nodes_baseline_data = {
                         'Threshold': thresholds_input_nodes,
                         'Precision': precision_input_nodes[:-1],
