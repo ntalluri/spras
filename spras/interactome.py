@@ -4,7 +4,6 @@ Author: Neha Talluri
 
 Methods for converting from the universal network input format and to the universal network output format
 """
-
 import pandas as pd
 
 
@@ -16,6 +15,29 @@ def has_direction(df: pd.DataFrame) -> bool:
     directed_df = df[df['Direction'] == 'D']
     # have at least one element?
     return not directed_df.empty
+
+
+def sort_and_deduplicate_undirected(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Sorts and removes duplicated undirected edges and directed edges are left unchanged.
+
+    For each undirected edge, the nodes are sorted so that Interactor1
+    is always lexicographically (or numerically) less than Interactor2.
+    Duplicate undirected edges are then removed.
+
+    @param df: input network df of edges, weights, and directionality
+    @return a dataframe with sorted undirected, deduplicated edges and unchanged directed edges
+    """
+    mask = df['Direction'] == 'U'
+    undirected = df[mask].copy()
+
+    undirected[["Interactor1", "Interactor2"]] = undirected[["Interactor1", "Interactor2"]].apply(sorted, axis=1, result_type="expand")
+
+    undirected = undirected.drop_duplicates(subset=["Interactor1", "Interactor2"])
+
+    directed = df[~mask]
+    return pd.concat([directed, undirected], ignore_index=True)
+
 
 def convert_undirected_to_directed(df: pd.DataFrame) -> pd.DataFrame:
     """

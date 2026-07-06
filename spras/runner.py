@@ -1,46 +1,46 @@
-from typing import Any
+import copy
+import importlib
+from typing import Any, Mapping
 
-# supported algorithm imports
-from spras.allpairs import AllPairs
-from spras.btb import BowTieBuilder
+from spras.config.dataset import DatasetSchema
+from spras.config.util import ALGORITHM_REGISTRY, AlgorithmName
 from spras.dataset import Dataset
-from spras.domino import DOMINO
-from spras.meo import MEO
-from spras.mincostflow import MinCostFlow
-from spras.omicsintegrator1 import OmicsIntegrator1
-from spras.omicsintegrator2 import OmicsIntegrator2
-from spras.pathlinker import PathLinker
 from spras.prm import PRM
-from spras.responsenet import ResponseNet
-from spras.rwr import RWR
-from spras.strwr import ST_RWR
+from spras.util import LoosePathLike
 
-algorithms: dict[str, type[PRM]] = {
-    "allpairs": AllPairs,
-    "bowtiebuilder": BowTieBuilder,
-    "domino": DOMINO,
-    "meo": MEO,
-    "mincostflow": MinCostFlow,
-    "omicsintegrator1": OmicsIntegrator1,
-    "omicsintegrator2": OmicsIntegrator2,
-    "pathlinker": PathLinker,
-    "responsenet": ResponseNet,
-    "rwr": RWR,
-    "strwr": ST_RWR,
-}
+
+def _load_algorithms() -> dict[str, type[PRM]]:
+    """Load all algorithm classes from ALGORITHM_REGISTRY via importlib."""
+    result = {}
+    for name, (module_path, class_name) in ALGORITHM_REGISTRY.items():
+        mod = importlib.import_module(module_path)
+        result[name] = getattr(mod, class_name)
+    return result
+
+
+# Eagerly load all algorithm classes once at import time so every call to
+# get_algorithm() is a cheap dict lookup rather than a repeated importlib call.
+algorithms = _load_algorithms()
 
 def get_algorithm(algorithm: str) -> type[PRM]:
     try:
-        return algorithms[algorithm.lower()]
-    except KeyError as exc:
+        algo_enum = AlgorithmName(algorithm)
+        return algorithms[algo_enum.value]
+    except (ValueError, KeyError) as exc:
         raise NotImplementedError(f'{algorithm} is not currently supported.') from exc
 
-def run(algorithm: str, params):
+def run(algorithm: str, inputs, output_file, args, container_settings):
     """
     A generic interface to the algorithm-specific run functions
     """
     algorithm_runner = get_algorithm(algorithm)
-    algorithm_runner.run(**params)
+    # Resolve per-algorithm image override so containers.py can use it
+    settings = copy.copy(container_settings)
+    if settings.images and algorithm in settings.images:
+        settings.image_override = settings.images[algorithm]
+    # We can't use config.config here else we would get a cyclic dependency.
+    # Since args is a dict here, we use the 'run_typeless' utility PRM function.
+    algorithm_runner.run_typeless(inputs, output_file, args, settings)
 
 
 def get_required_inputs(algorithm: str):
@@ -53,17 +53,17 @@ def get_required_inputs(algorithm: str):
     return algorithm_runner.required_inputs
 
 
-def merge_input(dataset_dict, dataset_file: str):
+def merge_input(dataset_data: DatasetSchema, dataset_output: LoosePathLike):
     """
     Merge files listed for this dataset and write the dataset to disk
     @param dataset_dict: dataset to process
     @param dataset_file: output filename
     """
-    dataset = Dataset(dataset_dict)
-    dataset.to_file(dataset_file)
+    dataset = Dataset(dataset_data)
+    dataset.to_file(dataset_output)
 
 
-def prepare_inputs(algorithm: str, data_file: str, filename_map: dict[str, str]):
+def prepare_inputs(algorithm: str, data_file: LoosePathLike, filename_map: Mapping[str, LoosePathLike]):
     """
     Prepare general dataset files for this algorithm
     @param algorithm: algorithm name
@@ -76,7 +76,8 @@ def prepare_inputs(algorithm: str, data_file: str, filename_map: dict[str, str])
     return algorithm_runner.generate_inputs(dataset, filename_map)
 
 
-def parse_output(algorithm: str, raw_pathway_file: str, standardized_pathway_file: str, params: dict[str, Any]):
+# TODO: make raw_pathway_file and standardized_pathway_file LoosePathLike
+def parse_output(algorithm: str, raw_pathway_file: str, standardized_pathway_file: str, params: Mapping[str, Any]):
     """
     Convert a predicted pathway into the universal format
     @param algorithm: algorithm name
