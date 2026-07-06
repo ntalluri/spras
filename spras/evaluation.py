@@ -34,10 +34,10 @@ class Evaluation:
 
     label: str
     datasets: list[str]
-    node_table: pd.DataFrame
-    mixed_edge_table: pd.DataFrame
-    undirected_edge_table: pd.DataFrame
-    directed_edge_table: pd.DataFrame
+    node_table: pd.DataFrame # the node gold standard
+    mixed_edge_table: pd.DataFrame # the edge gold standard
+    undirected_edge_table: pd.DataFrame # the edge gold standard fully undirected
+    directed_edge_table: pd.DataFrame # the edge gold standard fully directed
 
     @staticmethod
     def merge_gold_standard_input(gs_dict: GoldStandardDict, gs_file: str | os.PathLike):
