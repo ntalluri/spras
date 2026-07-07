@@ -15,6 +15,7 @@ from sklearn.metrics import (
 )
 
 from spras.analysis.ml import create_palette
+from spras.dataset import Dataset
 from spras.interactome import (
     convert_directed_to_undirected,
     convert_undirected_to_directed,
@@ -32,8 +33,8 @@ class GoldStandardDict(TypedDict):
 class Evaluation:
     NODE_ID = 'NODEID'
 
-    label: str
-    datasets: list[str]
+    label: str # gold standard label
+    datasets: list[str] # datasets associated with the dataset_labels for the specific gold standard
     node_table: pd.DataFrame # the node gold standard
     mixed_edge_table: pd.DataFrame # the edge gold standard
     undirected_edge_table: pd.DataFrame # the edge gold standard fully undirected
@@ -184,7 +185,7 @@ class Evaluation:
         return pr_df
 
     @staticmethod
-    def visualize_precision_and_recall_plot(pr_df: pd.DataFrame, output_file: str | PathLike, output_png: str | PathLike, title: str):
+    def visualize_precision_and_recall_plot(pr_df: pd.DataFrame, input_nodes: pd.DataFrame, node_table: pd.DataFrame, output_file: str | PathLike, output_png: str | PathLike, title: str):
         """
         Generates a scatter plot of precision and recall values for each pathway and saves both
         the plot and the data.
@@ -194,7 +195,9 @@ class Evaluation:
         for each algorithm.
 
         @param pr_df: Dataframe of calculated precision and recall for each pathway file.
-                      Must include a preprocessed 'Algorithm' column.
+                      Must include a preprocessed 'ADataframelgorithm' column.
+        @param input_nodes: the input nodes (sources, targets, prizes, actives) used for a specific dataset
+        @param node_table: the gold standard nodes
         @param output_file: the filename to save the precision and recall of each pathway
         @param output_png: the filename to plot the precision and recall of each pathway (not a PRC)
         @param title: The title to use for the plot
@@ -220,6 +223,13 @@ class Evaluation:
                     label=algorithm.capitalize()
                 )
 
+        gold_standard_nodes = set(node_table[Evaluation.NODE_ID])
+        input_nodes_set = set(input_nodes['NODEID'])
+        input_nodes_tp = len(input_nodes_set & gold_standard_nodes)
+        precision_input = input_nodes_tp / len(input_nodes_set)
+        recall_input = input_nodes_tp / len(gold_standard_nodes)
+        plt.plot(recall_input, precision_input, color='red', markersize=12, marker='X', linestyle='None', label=f'Input Nodes vs Gold Standard Baseline (P={precision_input:.3f}, R={recall_input:.3f})')
+
         plt.title(title)
         plt.xlabel('Recall')
         plt.ylabel('Precision')
@@ -235,13 +245,15 @@ class Evaluation:
         pr_df.to_csv(output_file, sep='\t', index=False)
 
     @staticmethod
-    def precision_and_recall_per_pathway(pr_df: pd.DataFrame, output_file: str | PathLike, output_png: str | PathLike, aggregate_per_algorithm: bool = False):
+    def precision_and_recall_per_pathway(pr_df: pd.DataFrame, input_nodes: pd.DataFrame, node_table: pd.DataFrame, output_file: str | PathLike, output_png: str | PathLike, aggregate_per_algorithm: bool = False):
         """
         Function for visualizing per pathway precision and recall across all algorithms. Each point in the plot represents
         a single pathway reconstruction. If `aggregate_per_algorithm` is set to True, the plot is restricted to a single
         algorithm and titled accordingly.
 
         @param pr_df: Dataframe of calculated precision and recall for each pathway file
+        @param input_nodes: the input nodes (sources, targets, prizes, actives) used for a specific dataset
+        @param node_table: the gold standard nodes
         @param output_file: the filename to save the precision and recall of each pathway
         @param output_png: the filename to plot the precision and recall of each pathway (not a PRC)
         @param aggregate_per_algorithm: Boolean indicating if function is used per algorithm (Default False)
@@ -256,7 +268,7 @@ class Evaluation:
             else:
                 title = "Precision and Recall Plot Per Pathway Per Algorithm"
 
-            Evaluation.visualize_precision_and_recall_plot(pr_df, output_file, output_png, title)
+            Evaluation.visualize_precision_and_recall_plot(pr_df, input_nodes, node_table, output_file, output_png, title)
 
         else:
             # this block should never be reached — having 0 pathways implies that no algorithms or parameter combinations were run,
@@ -264,7 +276,7 @@ class Evaluation:
             raise ValueError("No pathways were provided to evaluate and visulize on. This likely means no algorithms or parameter combinations were run.")
 
     @staticmethod
-    def precision_and_recall_pca_chosen_pathway(pr_df: pd.DataFrame, output_file: str | PathLike, output_png: str | PathLike, aggregate_per_algorithm: bool = False):
+    def precision_and_recall_pca_chosen_pathway(pr_df: pd.DataFrame, input_nodes: pd.DataFrame, node_table: pd.DataFrame, output_file: str | PathLike, output_png: str | PathLike, aggregate_per_algorithm: bool = False):
         """
 
         Function for visualizing the precision and recall of the single parameter combination selected via PCA,
@@ -273,6 +285,8 @@ class Evaluation:
         is True, the plot includes a pca chosen pathway per algorithm and titled accordingly.
 
         @param pr_df: Dataframe of calculated precision and recall for each pathway file
+        @param input_nodes: the input nodes (sources, targets, prizes, actives) used for a specific dataset
+        @param node_table: the gold standard nodes
         @param output_file: the filename to save the precision and recall of each pathway
         @param output_png: the filename to plot the precision and recall of each pathway (not a PRC)
         @param aggregate_per_algorithm: Boolean indicating if function is used per algorithm (Default False)
@@ -288,7 +302,7 @@ class Evaluation:
             else:
                 title = "PCA-Chosen Pathway Across All Algorithms Precision and Recall Plot"
 
-            Evaluation.visualize_precision_and_recall_plot(pr_df, output_file, output_png, title)
+            Evaluation.visualize_precision_and_recall_plot(pr_df,  input_nodes, node_table, output_file, output_png, title)
 
         else:
             # Edge case: if all algorithms chosen use only 1 parameter combination
@@ -377,12 +391,12 @@ class Evaluation:
         @param node_table: dataFrame of gold standard nodes (column: NODEID)
         @param ensemble_files: list of file paths containing edge ensemble outputs
         @param dataset_file: path to the dataset file used to load the interactome
-        @return: dictionary mapping each ensemble source to its node ensemble DataFrame
+        @return: dictionary mapping each ensemble source to its node ensemble DataFrame and the input nodes (sources, targets, prizes, actives)
         """
 
         node_ensembles_dict = dict()
 
-        pickle = Evaluation.from_file(dataset_file)
+        pickle = Dataset.from_file(dataset_file)
         interactome = pickle.get_interactome()
 
         if interactome.empty:
@@ -422,8 +436,9 @@ class Evaluation:
         return node_ensembles_dict
 
     @staticmethod
-    def precision_recall_curve_node_ensemble(node_ensembles: dict, node_table: pd.DataFrame, input_nodes: pd.DataFrame, output_png: str | PathLike,
-                                             output_file: str | PathLike, aggregate_per_algorithm: bool = False):
+    def precision_recall_curve_node_ensemble(node_ensembles: dict, node_table: pd.DataFrame, input_nodes: pd.DataFrame,
+                                            output_png: str | PathLike, output_file: str | PathLike,
+                                            aggregate_per_algorithm: bool = False):
         """
         Plots precision-recall (PR) curves for a set of node ensembles evaluated against a gold standard.
 
@@ -440,6 +455,7 @@ class Evaluation:
         @param aggregate_per_algorithm: Boolean indicating if function is used per algorithm (Default False)
         """
         gold_standard_nodes = set(node_table[Evaluation.NODE_ID])
+        input_nodes_set = set(input_nodes['NODEID'])
 
         # make color palette per ensemble label name
         label_names = list(node_ensembles.keys())
@@ -449,81 +465,60 @@ class Evaluation:
 
         prc_dfs = []
         metric_dfs = []
-        prc_input_nodes_baseline_df = None
-        baseline = None
+        gs_baseline = None
+        input_gold_baseline = None
+        input_baseline = None
 
         for label, node_ensemble in node_ensembles.items():
-            if not node_ensemble.empty:
-                y_true = [1 if node in gold_standard_nodes else 0 for node in node_ensemble['Node']]
-                y_scores = node_ensemble['Frequency'].tolist()
-
-                # input nodes (sources, targets, prizes, actives) may be easier to recover but are still valid gold standard nodes;
-                # the Input_Nodes_Baseline PR curve highlights their overlap with the gold standard.
-                if prc_input_nodes_baseline_df is None:
-                    input_nodes_set = set(input_nodes['NODEID'])
-                    input_nodes_gold_intersection = input_nodes_set & gold_standard_nodes # TODO should this be all inputs nodes or the intersection with the gold standard for this baseline? I think it should be the intersection
-                    input_nodes_ensemble_df = node_ensemble.copy()
-
-                    # set 'Frequency' to 1.0 if the input node is also in the gold standard intersection, else set to 0.0
-                    input_nodes_ensemble_df["Frequency"] = (
-                        input_nodes_ensemble_df["Node"].isin(input_nodes_gold_intersection).astype(float)
-                    )
-
-                    y_scores_input_nodes = input_nodes_ensemble_df['Frequency'].tolist()
-
-                    precision_input_nodes, recall_input_nodes, thresholds_input_nodes = precision_recall_curve(y_true, y_scores_input_nodes)
-                    plt.plot(recall_input_nodes, precision_input_nodes, color='black', marker='o', linestyle='--', label=f'Input Nodes Baseline')
-
-                    # Dropping last elements because scikit-learn adds (1, 0) to precision/recall for plotting, not tied to real thresholds
-                    # https://scikit-learn.org/stable/modules/generated/sklearn.metrics.precision_recall_curve.html#sklearn.metrics.precision_recall_curve:~:text=Returns%3A-,precision,predictions%20with%20score%20%3E%3D%20thresholds%5Bi%5D%20and%20the%20last%20element%20is%200.,-thresholds
-                    prc_input_nodes_baseline_data = {
-                        'Threshold': thresholds_input_nodes,
-                        'Precision': precision_input_nodes[:-1],
-                        'Recall': recall_input_nodes[:-1],
-                    }
-
-                    prc_input_nodes_baseline_data = {'Ensemble_Source': ["Input_Nodes_Baseline"] * len(thresholds_input_nodes), **prc_input_nodes_baseline_data}
-                    prc_input_nodes_baseline_df = pd.DataFrame.from_dict(prc_input_nodes_baseline_data)
-
-                precision, recall, thresholds = precision_recall_curve(y_true, y_scores)
-                # avg precision summarizes a precision-recall curve as the weighted mean of precisions achieved at each threshold
-                avg_precision = average_precision_score(y_true, y_scores)
-
-                # only set baseline precision once
-                # the same for every algorithm per dataset/goldstandard pair
-                if baseline is None:
-                    baseline = np.sum(y_true) / len(y_true)
-                    plt.axhline(y=baseline, color='black', linestyle='--', label=f'Baseline: {baseline:.4f}')
-
-                plt.plot(recall, precision, color=color_palette[label], marker='o',
-                         label=f'{label.capitalize()} (AP: {avg_precision:.4f})')
-
-                # Dropping last elements because scikit-learn adds (1, 0) to precision/recall for plotting, not tied to real thresholds
-                # https://scikit-learn.org/stable/modules/generated/sklearn.metrics.precision_recall_curve.html#sklearn.metrics.precision_recall_curve:~:text=Returns%3A-,precision,predictions%20with%20score%20%3E%3D%20thresholds%5Bi%5D%20and%20the%20last%20element%20is%200.,-thresholds
-                prc_data = {
-                    'Threshold': thresholds,
-                    'Precision': precision[:-1],
-                    'Recall': recall[:-1],
-                }
-
-                metric_data = {
-                    'Average_Precision': [avg_precision],
-                }
-
-                ensemble_source = label.capitalize() if label != 'ensemble' else 'Aggregated'
-                prc_data = {'Ensemble_Source': [ensemble_source] * len(thresholds), **prc_data}
-                metric_data = {'Ensemble_Source': [ensemble_source], **metric_data}
-
-                prc_df = pd.DataFrame.from_dict(prc_data)
-                prc_dfs.append(prc_df)
-                metric_df = pd.DataFrame.from_dict(metric_data)
-                metric_dfs.append(metric_df)
-
-            else:
+            if node_ensemble.empty:
                 raise ValueError(
-                    "Cannot compute PR curve: the ensemble network is empty."
-                    f"This should not happen unless the input network for pathway reconstruction is empty."
+                    "Cannot compute PR curve: the ensemble network is empty. "
+                    "This should not happen unless the input network for pathway reconstruction is empty."
                 )
+
+            y_true = [1 if node in gold_standard_nodes else 0 for node in node_ensemble['Node']]
+            y_scores = node_ensemble['Frequency'].tolist()
+
+            precision, recall, thresholds = precision_recall_curve(y_true, y_scores)
+            # avg precision summarizes a PR curve as the weighted mean of precisions achieved at each threshold
+            avg_precision = average_precision_score(y_true, y_scores)
+            plt.plot(recall, precision, color=color_palette[label], marker='o', label=f'{label.capitalize()} (AP: {avg_precision:.4f})')
+
+            # Different baselines
+            # Computed once; identical for every algorithm on a given dataset/gold-standard pair.
+            if gs_baseline is None and input_gold_baseline is None and input_baseline is None:
+                universe_size = len(y_scores)
+
+                # gs_baseline = |gold_standard| / |universe|: random-predictor precision
+                # beat this to beat random
+                gs_baseline = np.sum(y_true) / universe_size
+                plt.axhline(y=gs_baseline, color='gray', linestyle='--',
+                            label=f'Gold Standard Baseline (P={gs_baseline:.4f})')
+
+                # input_gold_prev = |input and gold| / |universe|: fraction of the network that is both input and gold
+                # numerator counts only gold nodes that are also inputs, not all gold nodes.
+                input_gold_baseline = len(input_nodes_set & gold_standard_nodes) / universe_size
+                plt.axhline(y=input_gold_baseline, color='gray', linestyle=':',
+                            label=f'Input Nodes and Gold Standard Baseline (P={input_gold_baseline:.4f})')
+
+                # input_prevalence = |input| / |universe|: fraction of the network that is input nodes
+                input_baseline= len(input_nodes_set) / universe_size
+                plt.axhline(y=input_baseline, color='gray', linestyle='-.',
+                            label=f'Input Nodes Baseline (P={input_baseline:.4f})')
+
+            # Drop the last precision/recall element: sklearn appends (1, 0) for plotting, not tied to a real threshold.
+            # https://scikit-learn.org/stable/modules/generated/sklearn.metrics.precision_recall_curve.html
+            ensemble_source = label.capitalize() if label != 'ensemble' else 'Aggregated'
+            prc_dfs.append(pd.DataFrame({
+                'Ensemble_Source': [ensemble_source] * len(thresholds),
+                'Threshold': thresholds,
+                'Precision': precision[:-1],
+                'Recall': recall[:-1],
+            }))
+            metric_dfs.append(pd.DataFrame({
+                'Ensemble_Source': [ensemble_source],
+                'Average_Precision': [avg_precision],
+            }))
 
         if aggregate_per_algorithm:
             plt.title('Precision-Recall Curve Per Algorithm Specific Ensemble')
@@ -541,21 +536,23 @@ class Evaluation:
 
         combined_prc_df = pd.concat(prc_dfs, ignore_index=True)
         combined_metrics_df = pd.concat(metric_dfs, ignore_index=True)
-        combined_metrics_df['Baseline'] = baseline
+        combined_metrics_df['Gold_Standard_Baseline'] = gs_baseline
+        combined_metrics_df['Input_Nodes_and _Gold_Standard_Baseline'] = gs_baseline
+        combined_metrics_df['Input_Nodes_Baseline'] = input_baseline
 
-        # merge dfs and NaN out metric values except for first row of each Ensemble_Source
-        complete_df = combined_prc_df.merge(combined_metrics_df, on='Ensemble_Source', how='left').merge(prc_input_nodes_baseline_df, on=['Ensemble_Source', 'Threshold', 'Precision', 'Recall'], how='outer')
 
-        # for each Ensemble_Source, remove Average_Precision and Baseline in all but the first row
-        not_last_rows = complete_df.duplicated(subset='Ensemble_Source', keep='first')
-        complete_df.loc[not_last_rows, ['Average_Precision', 'Baseline']] = None
+        # merge curves with per-source metrics, then add the input-nodes baseline as its own row
+        complete_df = (
+            combined_prc_df
+            .merge(combined_metrics_df, on='Ensemble_Source', how='left')
+        )
 
-        # move Input_Nodes_Baseline to the top of the df
+        # keep Average_Precision and Baseline only on the first row of each Ensemble_Source
+        not_first_rows = complete_df.duplicated(subset='Ensemble_Source', keep='first')
+        complete_df.loc[not_first_rows, ['Average_Precision', 'Gold_Standard_Baseline', 'Input_Nodes_and _Gold_Standard_Baseline', 'Input_Nodes_Baseline']] = None
+
         complete_df.sort_values(
             by='Ensemble_Source',
-            # x.ne('Input_Nodes_Baseline'): returns a Series of booleans; True for all rows except Input_Nodes_Baseline.
-            # Since False < True, baseline rows sort to the top.
-            key=lambda x: x.ne('Input_Nodes_Baseline'),
             inplace=True
         )
 
