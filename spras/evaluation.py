@@ -465,9 +465,7 @@ class Evaluation:
 
         prc_dfs = []
         metric_dfs = []
-        gs_baseline = None
-        input_gold_baseline = None
-        input_baseline = None
+        baseline = None
 
         for label, node_ensemble in node_ensembles.items():
             if node_ensemble.empty:
@@ -486,25 +484,42 @@ class Evaluation:
 
             # Different baselines
             # Computed once; identical for every algorithm on a given dataset/gold-standard pair.
-            if gs_baseline is None and input_gold_baseline is None and input_baseline is None:
+            if baseline is None:
                 universe_size = len(y_scores)
 
-                # gs_baseline = |gold_standard| / |universe|: random-predictor precision
-                # beat this to beat random
-                gs_baseline = np.sum(y_true) / universe_size
-                plt.axhline(y=gs_baseline, color='gray', linestyle='--',
-                            label=f'Gold Standard Baseline (P={gs_baseline:.4f})')
+                # baseline = |gold_standard| / |universe|: random-predictor precision
+                baseline = np.sum(y_true) / universe_size
+                plt.axhline(y=baseline, color='red', linestyle='--',
+                            label=f'Baseline (P={baseline:.4f})')
 
-                # input_gold_prev = |input and gold| / |universe|: fraction of the network that is both input and gold
-                # numerator counts only gold nodes that are also inputs, not all gold nodes.
-                input_gold_baseline = len(input_nodes_set & gold_standard_nodes) / universe_size
-                plt.axhline(y=input_gold_baseline, color='gray', linestyle=':',
-                            label=f'Input Nodes and Gold Standard Baseline (P={input_gold_baseline:.4f})')
+                # Input nodes PR curve: a 2-point curve built the same way as the algorithm
+                # ensembles, but with a synthetic frequency of 1 for input nodes and 0 for
+                # everything else. Since scores are binary, precision_recall_curve returns
+                # exactly two operating points: predicting only the input nodes as positive,
+                # and predicting the full universe as positive (equivalent to baseline).
 
-                # input_prevalence = |input| / |universe|: fraction of the network that is input nodes
-                input_baseline= len(input_nodes_set) / universe_size
-                plt.axhline(y=input_baseline, color='gray', linestyle='-.',
-                            label=f'Input Nodes Baseline (P={input_baseline:.4f})')
+                input_node_ensemble = node_ensemble[['Node']].copy() # the full interactome is in this already
+                input_node_ensemble['Frequency'] = input_node_ensemble['Node'].isin(input_nodes_set).astype(float)
+
+                input_y_true = [1 if node in gold_standard_nodes else 0 for node in input_node_ensemble['Node']]
+                input_y_scores = input_node_ensemble['Frequency'].tolist()
+
+                input_precision, input_recall, input_thresholds = precision_recall_curve(input_y_true, input_y_scores)
+                input_baseline = average_precision_score(input_y_true, input_y_scores)
+
+                plt.plot(input_recall, input_precision, color='red', marker='s', linestyle='--',
+                        label=f'Input Nodes (AP: {input_baseline:.4f})')
+
+                prc_dfs.append(pd.DataFrame({
+                    'Ensemble_Source': ['Input Nodes'] * len(input_thresholds),
+                    'Threshold': input_thresholds,
+                    'Precision': input_precision[:-1],
+                    'Recall': input_recall[:-1],
+                }))
+                metric_dfs.append(pd.DataFrame({
+                    'Ensemble_Source': ['Input Nodes'],
+                    'Average_Precision': [input_baseline],
+                }))
 
             # Drop the last precision/recall element: sklearn appends (1, 0) for plotting, not tied to a real threshold.
             # https://scikit-learn.org/stable/modules/generated/sklearn.metrics.precision_recall_curve.html
@@ -536,9 +551,7 @@ class Evaluation:
 
         combined_prc_df = pd.concat(prc_dfs, ignore_index=True)
         combined_metrics_df = pd.concat(metric_dfs, ignore_index=True)
-        combined_metrics_df['Gold_Standard_Baseline'] = gs_baseline
-        combined_metrics_df['Input_Nodes_and _Gold_Standard_Baseline'] = gs_baseline
-        combined_metrics_df['Input_Nodes_Baseline'] = input_baseline
+        combined_metrics_df['Baseline'] = baseline
 
 
         # merge curves with per-source metrics, then add the input-nodes baseline as its own row
@@ -549,7 +562,7 @@ class Evaluation:
 
         # keep Average_Precision and Baseline only on the first row of each Ensemble_Source
         not_first_rows = complete_df.duplicated(subset='Ensemble_Source', keep='first')
-        complete_df.loc[not_first_rows, ['Average_Precision', 'Gold_Standard_Baseline', 'Input_Nodes_and _Gold_Standard_Baseline', 'Input_Nodes_Baseline']] = None
+        complete_df.loc[not_first_rows, ['Average_Precision', 'Baseline']] = None
 
         complete_df.sort_values(
             by='Ensemble_Source',
