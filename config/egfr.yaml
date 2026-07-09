@@ -31,12 +31,12 @@ algorithms:
     include: true
     runs:
       run1:
-        k:
-          - 10
-          - 20
-          - 70
+        k: range(10, 510, 20)
+        # - 10
+        # - 20
+        # - 70
   - name: omicsintegrator1
-    include: true
+    include: false
     runs:
       run1:
         b:
@@ -44,13 +44,13 @@ algorithms:
           - 2
           - 10
         d: 10
-        g: 1e-3
+        g: 0.001
         r: 0.01
         w: 0.1
         mu: 0.008
         dummy_mode: ["file"]
   - name: omicsintegrator2
-    include: true
+    include: false
     runs:
       run1:
         b: 4
@@ -59,7 +59,7 @@ algorithms:
         b: 2
         g: 3
   - name: meo
-    include: true
+    include: false
     runs:
       run1:
         local_search: true
@@ -70,15 +70,15 @@ algorithms:
         max_path_length: 2
         rand_restarts: 10
   - name: allpairs
-    include: true
+    include: false
   - name: domino
-    include: true
+    include: false
     runs:
       run1:
         slice_threshold: 0.3
         module_threshold: 0.05
   - name: mincostflow
-    include: true
+    include: false
     runs:
       run1:
         capacity: 15
@@ -90,14 +90,14 @@ algorithms:
         capacity: 5
         flow: 60
   - name: "strwr"
-    include: true
+    include: false
     runs:
       run1:
         alpha: [0.85]
         threshold: [100, 200]
 
   - name: "rwr"
-    include: true
+    include: false
     runs:
       run1:
         alpha: [0.85]
@@ -125,7 +125,7 @@ reconstruction_settings:
     reconstruction_dir: output/egfr
 analysis:
   cytoscape:
-    include: true
+    include: false
   summary:
     include: true
   ml:

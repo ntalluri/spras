@@ -497,7 +497,6 @@ class Evaluation:
                 # everything else. Since scores are binary, precision_recall_curve returns
                 # exactly two operating points: predicting only the input nodes as positive,
                 # and predicting the full universe as positive (equivalent to baseline).
-
                 input_node_ensemble = node_ensemble[['Node']].copy() # the full interactome is in this already
                 input_node_ensemble['Frequency'] = input_node_ensemble['Node'].isin(input_nodes_set).astype(float)
 
