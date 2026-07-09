@@ -224,12 +224,13 @@ class Evaluation:
                     label=algorithm.capitalize()
                 )
 
+        # input nodes baseline
         gold_standard_nodes = set(node_table[Evaluation.NODE_ID])
         input_nodes_set = set(input_nodes['NODEID'])
         input_nodes_tp = len(input_nodes_set & gold_standard_nodes)
         precision_input = input_nodes_tp / len(input_nodes_set)
         recall_input = input_nodes_tp / len(gold_standard_nodes)
-        plt.plot(recall_input, precision_input, color='red', markersize=12, marker='X', linestyle='None', label=f'Input Nodes vs Gold Standard Baseline (P={precision_input:.3f}, R={recall_input:.3f})')
+        plt.plot(recall_input, precision_input, color='red', markersize=12, marker='X', linestyle='None', label=f'Input Nodes (P={precision_input:.3f}, R={recall_input:.3f})')
 
         plt.title(title)
         plt.xlabel('Recall')
@@ -241,8 +242,14 @@ class Evaluation:
         plt.savefig(output_png)
         plt.close()
 
-        # save dataframe
+        # save dataframe with input node baseline
         pr_df.drop(columns=['Algorithm'], inplace=True)
+        input_nodes_row = pd.DataFrame({
+            'Pathway': ['Input Nodes'],
+            'Precision': [precision_input],
+            'Recall': [recall_input],
+        })
+        pr_df = pd.concat([pr_df, input_nodes_row], ignore_index=True)
         pr_df.to_csv(output_file, sep='\t', index=False)
 
     @staticmethod
@@ -473,6 +480,7 @@ class Evaluation:
         prc_dfs = []
         metric_dfs = []
         baseline = None
+        input_baseline = None
 
         for label, node_ensemble in node_ensembles.items():
             if node_ensemble.empty:
@@ -484,14 +492,9 @@ class Evaluation:
             y_true = [1 if node in gold_standard_nodes else 0 for node in node_ensemble['Node']]
             y_scores = node_ensemble['Frequency'].tolist()
 
-            precision, recall, thresholds = precision_recall_curve(y_true, y_scores)
-            # avg precision summarizes a PR curve as the weighted mean of precisions achieved at each threshold
-            avg_precision = average_precision_score(y_true, y_scores)
-            plt.plot(recall, precision, color=color_palette[label], marker='o', label=f'{label.capitalize()} (AP: {avg_precision:.4f})')
-
             # Different baselines
             # Computed once; identical for every algorithm on a given dataset/gold-standard pair.
-            if baseline is None:
+            if baseline is None and input_baseline is None:
                 universe_size = len(y_scores)
 
                 # baseline = |gold_standard| / |universe|: random-predictor precision
@@ -527,6 +530,12 @@ class Evaluation:
                     'Average_Precision': [input_baseline],
                 }))
 
+            # calculate and plot prc for node_ensemble
+            precision, recall, thresholds = precision_recall_curve(y_true, y_scores)
+            # avg precision summarizes a PR curve as the weighted mean of precisions achieved at each threshold
+            avg_precision = average_precision_score(y_true, y_scores)
+            plt.plot(recall, precision, color=color_palette[label], marker='o', label=f'{label.capitalize()} (AP: {avg_precision:.4f})')
+
             # Drop the last precision/recall element: sklearn appends (1, 0) for plotting, not tied to a real threshold.
             # https://scikit-learn.org/stable/modules/generated/sklearn.metrics.precision_recall_curve.html
             ensemble_source = label.capitalize() if label != 'ensemble' else 'Aggregated'
@@ -558,7 +567,6 @@ class Evaluation:
         combined_prc_df = pd.concat(prc_dfs, ignore_index=True)
         combined_metrics_df = pd.concat(metric_dfs, ignore_index=True)
         combined_metrics_df['Baseline'] = baseline
-
 
         # merge curves with per-source metrics, then add the input-nodes baseline as its own row
         complete_df = (
