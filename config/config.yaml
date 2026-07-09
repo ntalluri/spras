@@ -233,7 +233,7 @@ reconstruction_settings:
   locations:
     #place the save path here
     # TODO move to global
-    reconstruction_dir: "output/config"
+    reconstruction_dir: "output"
 
 analysis:
   # Create one summary per pathway file and a single summary table for all pathways for each dataset
@@ -252,7 +252,7 @@ analysis:
     # specify how many principal components to calculate
     components: 2
     # boolean to show the labels on the pca graph
-    labels: false
+    labels: true
     # 'ward', 'complete', 'average', 'single'
     # if linkage: ward, must use metric: euclidean
     linkage: 'ward'
