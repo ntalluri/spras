@@ -304,7 +304,6 @@ class Evaluation:
         if not pr_df.empty:
             pr_df['Algorithm'] = pr_df['Pathway'].apply(lambda p: Path(p).parent.name.split('-')[1])
             pr_df.sort_values(by=['Recall', 'Pathway'], axis=0, ascending=True, inplace=True)
-
             if aggregate_per_algorithm:
                 title = "PCA-Chosen Pathway Per Algorithm Precision and Recall Plot"
             else:
@@ -480,7 +479,7 @@ class Evaluation:
         prc_dfs = []
         metric_dfs = []
         baseline = None
-        input_baseline = None
+        input_ap = None
 
         for label, node_ensemble in node_ensembles.items():
             if node_ensemble.empty:
@@ -494,7 +493,7 @@ class Evaluation:
 
             # Different baselines
             # Computed once; identical for every algorithm on a given dataset/gold-standard pair.
-            if baseline is None and input_baseline is None:
+            if baseline is None and input_ap is None:
                 universe_size = len(y_scores)
 
                 # baseline = |gold_standard| / |universe|: random-predictor precision
@@ -504,9 +503,8 @@ class Evaluation:
 
                 # Input nodes PR curve: a 2-point curve built the same way as the algorithm
                 # ensembles, but with a synthetic frequency of 1 for input nodes and 0 for
-                # everything else. Since scores are binary, precision_recall_curve returns
-                # exactly two operating points: predicting only the input nodes as positive,
-                # and predicting the full universe as positive (equivalent to baseline).
+                # everything else. Returns exactly two operating points: predicting only
+                # the input nodes as positive, and predicting the full universe as positive
                 input_node_ensemble = node_ensemble[['Node']].copy() # the full interactome is in this already
                 input_node_ensemble['Frequency'] = input_node_ensemble['Node'].isin(input_nodes_set).astype(float)
 
@@ -514,10 +512,10 @@ class Evaluation:
                 input_y_scores = input_node_ensemble['Frequency'].tolist()
 
                 input_precision, input_recall, input_thresholds = precision_recall_curve(input_y_true, input_y_scores)
-                input_baseline = average_precision_score(input_y_true, input_y_scores)
+                input_ap = average_precision_score(input_y_true, input_y_scores)
 
                 plt.plot(input_recall, input_precision, color='red', marker='s', linestyle='--',
-                        label=f'Input Nodes (AP: {input_baseline:.4f})')
+                        label=f'Input Nodes (AP: {input_ap:.4f})')
 
                 prc_dfs.append(pd.DataFrame({
                     'Ensemble_Source': ['Input Nodes'] * len(input_thresholds),
@@ -527,7 +525,7 @@ class Evaluation:
                 }))
                 metric_dfs.append(pd.DataFrame({
                     'Ensemble_Source': ['Input Nodes'],
-                    'Average_Precision': [input_baseline],
+                    'Average_Precision': [input_ap],
                 }))
 
             # calculate and plot prc for node_ensemble
@@ -578,11 +576,11 @@ class Evaluation:
         not_first_rows = complete_df.duplicated(subset='Ensemble_Source', keep='first')
         complete_df.loc[not_first_rows, ['Average_Precision', 'Baseline']] = None
 
+        # save df
         complete_df.sort_values(
             by='Ensemble_Source',
             inplace=True
         )
-
         complete_df.to_csv(output_file, index=False, sep='\t')
 
     @staticmethod

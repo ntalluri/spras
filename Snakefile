@@ -509,7 +509,7 @@ rule evaluation_pca_chosen:
         input_nodes = Dataset.from_file(input.dataset_file).get_input_nodes()
         pca_chosen_pathway = Evaluation.pca_chosen_pathway(input.pca_coordinates_file, input.pathway_summary_file, out_dir)
         pr_df = Evaluation.node_precision_and_recall(pca_chosen_pathway, node_table)
-        Evaluation.precision_and_recall_pca_chosen_pathway(pr_df, input_nodes, node_table, output.node_pca_chosen_pr_file, output.node_pca_chosen_pr_png, include_aggregate_algo_eval)
+        Evaluation.precision_and_recall_pca_chosen_pathway(pr_df, input_nodes, node_table, output.node_pca_chosen_pr_file, output.node_pca_chosen_pr_png)
 
 # Returns pca coordinates for a specific algorithm and dataset
 def collect_pca_coordinates_per_algo_per_dataset(wildcards):
