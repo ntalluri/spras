@@ -1,41 +1,54 @@
-Installing SPRAS
-================
+##################
+ Installing SPRAS
+##################
 
-SPRAS provides several convenient ways to use the package, depending on your needs
+SPRAS provides several convenient ways to use the package, depending on
+your needs
 
-Using a Conda Environment
--------------------------
-If you want to run spras locally on your machine, you can use the provided `environment.yml` file to create a conda environment
-with all the necessary dependencies:
-1. `Download and Install Conda`_
-2. Build the `spras` conda environment and activate it:
+.. _using-a-conda-environment:
 
-.. code-block:: bash
+***************************
+ Using a Conda Environment
+***************************
 
-    conda env create -f environment.yml
-    conda activate spras
+If you want to run spras locally on your machine, you can use the
+provided `environment.yml` file to create a conda environment with all
+the necessary dependencies: 1. `Download and Install Conda`_ 2. Build
+the `spras` conda environment and activate it:
 
-Installing SPRAS with `pip`
----------------------------
-You can also install SPRAS as a package using `pip` directly from the github repository:
+.. code:: bash
 
-.. code-block:: bash
+   conda env create -f environment.yml
+   conda activate spras
 
-    pip install git+https://github.com/Reed-CompBio/spras.git
+*****************************
+ Installing SPRAS with `pip`
+*****************************
 
-Getting the SPRAS Docker Image
-------------------------------
-SPRAS also publishes a Docker image that already holds all the necessary dependencies. Assuming you have Docker installed, you can pull
-the image from Docker Hub:
+You can also install SPRAS as a package using `pip` directly from the
+github repository:
 
-.. code-block:: bash
+.. code:: bash
 
-    docker pull reedcompbio/spras:latest
+   pip install git+https://github.com/Reed-CompBio/spras.git
 
-If you want to pull a specific version of spras, use the version for the image tag name. For example, to get spras v0.5.0:
+********************************
+ Getting the SPRAS Docker Image
+********************************
 
-.. code-block:: bash
+SPRAS also publishes a Docker image that already holds all the necessary
+dependencies. Assuming you have Docker installed, you can pull the image
+from Docker Hub:
 
-    docker pull reedcompbio/spras:0.5.0
+.. code:: bash
 
-.. _Download and Install Conda: https://conda-forge.org/download/
+   docker pull reedcompbio/spras:latest
+
+If you want to pull a specific version of spras, use the version for the
+image tag name. For example, to get spras v0.6.0:
+
+.. code:: bash
+
+   docker pull reedcompbio/spras:0.6.0
+
+.. _download and install conda: https://conda-forge.org/download/

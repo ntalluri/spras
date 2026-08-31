@@ -3,13 +3,15 @@ import platform
 import re
 import subprocess
 import textwrap
+import warnings
+from dataclasses import dataclass
 from pathlib import Path, PurePath, PurePosixPath
 from typing import Iterator, List, Optional, Tuple, Union
 
 import docker
 import docker.errors
 
-import spras.config.config as config
+from spras.config.container_schema import ContainerFramework, ProcessedContainerSettings
 from spras.logging import indent
 from spras.profiling import create_apptainer_container_stats, create_peer_cgroup
 from spras.util import hash_filename
@@ -173,43 +175,131 @@ def env_to_items(environment: dict[str, str]) -> Iterator[str]:
     # TODO: we should also handle special escaping here.
     return (f"{key}={value}" for key, value in environment.items())
 
+
+@dataclass(frozen=True)
+class ResolvedImage:
+    """Result of resolve_container_image().
+
+    Carries the resolved image reference and whether it points to a local .sif file,
+    so downstream code never needs to re-inspect image_override.
+    """
+    image: str          # registry URI (e.g. 'docker.io/reedcompbio/pathlinker:v2') or local .sif path
+    is_local_sif: bool  # True when image is a local .sif file
+
+
+def resolve_container_image(container_suffix: str, container_settings: ProcessedContainerSettings) -> ResolvedImage:
+    """
+    Resolve the container image from the algorithm's default suffix and any
+    per-algorithm image override in container_settings.
+
+    This is the single place where ``container_settings.image_override`` is
+    inspected.  All downstream code (docker runner, singularity runner, dsub
+    runner) receives the ``ResolvedImage`` or its ``.image`` string and never
+    re-reads the override.
+
+    Warnings are emitted for suspicious override patterns (excessive path depth,
+    bare hostnames) and for .sif overrides on non-singularity frameworks.
+
+    @param container_suffix: algorithm's default container name (e.g. 'pathlinker:v2')
+    @param container_settings: the processed container settings (may include image_override)
+    @return: a ResolvedImage with the image string and whether it's a local .sif
+    """
+    image_override = container_settings.image_override
+
+    # Default: combine registry prefix with the algorithm's container suffix
+    container = container_settings.prefix + "/" + container_suffix
+
+    if image_override and image_override.endswith('.sif'):
+        # .sif overrides are only meaningful for apptainer/singularity.
+        if not container_settings.framework.is_singularity_family:
+            warnings.warn(
+                f"Image override '{image_override}' is a .sif file, but the container framework is "
+                f"'{container_settings.framework}'. .sif overrides are only supported with "
+                f"apptainer/singularity. Falling back to default image.",
+                stacklevel=2
+            )
+            return ResolvedImage(image=container, is_local_sif=False)
+        print(f'Container image override (local .sif): {image_override}', flush=True)
+        return ResolvedImage(image=image_override, is_local_sif=True)
+    elif image_override:
+        # Image reference override — determine how much of the URI is specified.
+        # Uses Docker's convention: if the first path component contains '.' or ':',
+        # it's a registry hostname and the reference is fully qualified.
+        if '/' in image_override:
+            first_component = image_override.split('/')[0]
+            if '.' in first_component or ':' in first_component:
+                # Full registry reference like "ghcr.io/myorg/image:tag" — use as-is
+                container = image_override
+            else:
+                # Owner/image like "some-other-owner/oi2:latest" — prepend base_url only
+                container = container_settings.base_url + "/" + image_override
+        else:
+            # Image name only like "pathlinker:v1234" — prepend full prefix (base_url/owner)
+            container = container_settings.prefix + "/" + image_override
+
+        # Warn about suspicious override patterns that may indicate a typo or misconfiguration.
+        # We still pass them through since they may be valid in unusual registries.
+        parts = container.split('/')
+        if len(parts) > 3:
+            warnings.warn(
+                f"Container image override '{image_override}' resolves to '{container}' "
+                f"which has {len(parts)} path components. Standard container references "
+                f"have at most 3 (registry/owner/image). This may be a misconfiguration. "
+                f"Attempting to use '{container}' as-is.",
+                stacklevel=2
+            )
+        elif '/' not in image_override and ':' not in image_override and '.' in image_override:
+            warnings.warn(
+                f"Container image override '{image_override}' looks like a hostname "
+                f"without an image name or tag. Did you mean to include an image name "
+                f"(e.g., '{image_override}/image:tag')? "
+                f"Attempting to use '{container}' as-is.",
+                stacklevel=2
+            )
+
+        print(f'Container image override: {container}', flush=True)
+    else:
+        print(f'Container image: {container}', flush=True)
+
+    return ResolvedImage(image=container, is_local_sif=False)
+
+
 # TODO consider a better default environment variable
 # Follow docker-py's naming conventions (https://docker-py.readthedocs.io/en/stable/containers.html)
 # Technically the argument is an image, not a container, but we use container here.
-def run_container(framework: str, container_suffix: str, command: List[str], volumes: List[Tuple[PurePath, PurePath]], working_dir: str, out_dir: str | os.PathLike, environment: Optional[dict[str, str]] = None, network_disabled = False):
+def run_container(container_suffix: str, command: List[str], volumes: List[Tuple[PurePath, PurePath]], working_dir: str, out_dir: str | os.PathLike, container_settings: ProcessedContainerSettings, environment: Optional[dict[str, str]] = None, network_disabled = False):
     """
     Runs a command in the container using Singularity or Docker
-    @param framework: singularity or docker
     @param container_suffix: name of the DockerHub container without the 'docker://' prefix
     @param command: command to run in the container
     @param volumes: a list of volumes to mount where each item is a (source, destination) tuple
     @param working_dir: the working directory in the container
+    @param container_settings: the settings to use to run the container
     @param out_dir: output directory for the rule's artifacts. Only passed into run_container_singularity for the purpose of profiling.
     @param environment: environment variables to set in the container
     @param network_disabled: Disables the network on the container. Only works for docker for now. This acts as a 'runtime assertion' that a container works w/o networking.
     @return: output from Singularity execute or Docker run
     """
-    normalized_framework = framework.casefold()
+    resolved = resolve_container_image(container_suffix, container_settings)
 
-    container = config.config.container_settings.prefix + "/" + container_suffix
-    if normalized_framework == 'docker':
-        return run_container_docker(container, command, volumes, working_dir, environment, network_disabled)
-    elif normalized_framework == 'singularity' or normalized_framework == "apptainer":
-        return run_container_singularity(container, command, volumes, working_dir, out_dir, environment)
-    elif normalized_framework == 'dsub':
-        return run_container_dsub(container, command, volumes, working_dir, environment)
+    if container_settings.framework == ContainerFramework.docker:
+        return run_container_docker(resolved.image, command, volumes, working_dir, environment, network_disabled)
+    elif container_settings.framework.is_singularity_family:
+        return run_container_singularity(resolved, command, volumes, working_dir, out_dir, container_settings, environment)
+    elif container_settings.framework == ContainerFramework.dsub:
+        return run_container_dsub(resolved.image, command, volumes, working_dir, environment)
     else:
-        raise ValueError(f'{framework} is not a recognized container framework. Choose "docker", "dsub", or "singularity".')
+        raise ValueError(f'{container_settings.framework} is not a recognized container framework. Choose "docker", "dsub", "apptainer", or "singularity".')
 
-def run_container_and_log(name: str, framework: str, container_suffix: str, command: List[str], volumes: List[Tuple[PurePath, PurePath]], working_dir: str, out_dir: str | os.PathLike, environment: Optional[dict[str, str]] = None, network_disabled=False):
+def run_container_and_log(name: str, container_suffix: str, command: List[str], volumes: List[Tuple[PurePath, PurePath]], working_dir: str, out_dir: str | os.PathLike, container_settings: ProcessedContainerSettings, environment: Optional[dict[str, str]] = None, network_disabled=False):
     """
     Runs a command in the container using Singularity or Docker with associated pretty printed messages.
     @param name: the display name of the running container for logging purposes
-    @param framework: singularity or docker
     @param container_suffix: name of the DockerHub container without the 'docker://' prefix
     @param command: command to run in the container
     @param volumes: a list of volumes to mount where each item is a (source, destination) tuple
     @param working_dir: the working directory in the container
+    @param container_settings: the container settings to use
     @param environment: environment variables to set in the container
     @param network_disabled: Disables the network on the container. Only works for docker for now. This acts as a 'runtime assertion' that a container works w/o networking.
     @return: output from Singularity execute or Docker run
@@ -217,9 +307,9 @@ def run_container_and_log(name: str, framework: str, container_suffix: str, comm
     if not environment:
         environment = {'SPRAS': 'True'}
 
-    print('Running {} on container framework "{}" on env {} with command: {}'.format(name, framework, list(env_to_items(environment)), ' '.join(command)), flush=True)
+    print('Running {} on container framework "{}" on env {} with command: {}'.format(name, container_settings.framework, list(env_to_items(environment)), ' '.join(command)), flush=True)
     try:
-        out = run_container(framework=framework, container_suffix=container_suffix, command=command, volumes=volumes, working_dir=working_dir, out_dir=out_dir, environment=environment, network_disabled=network_disabled)
+        out = run_container(container_suffix=container_suffix, command=command, volumes=volumes, working_dir=working_dir, out_dir=out_dir, container_settings=container_settings, environment=environment, network_disabled=network_disabled)
         if out is not None:
             if isinstance(out, list):
                 out = ''.join(out)
@@ -344,11 +434,71 @@ def run_container_docker(container: str, command: List[str], volumes: List[Tuple
     # finally:
     return out
 
-def run_container_singularity(container: str, command: List[str], volumes: List[Tuple[PurePath, PurePath]], working_dir: str, out_dir: str, environment: Optional[dict[str, str]] = None):
+
+def _prepare_singularity_image(resolved: ResolvedImage, config: ProcessedContainerSettings):
+    """
+    Prepare the image that apptainer/singularity should run.
+
+    Handles sandbox unpacking and Docker URI prefixing.  Does **not** inspect
+    ``config.image_override`` — all override logic is in ``resolve_container_image()``.
+
+    Returns a path or URI suitable for Client.execute() or the profiling command.
+    The four cases are:
+      1. unpack + local .sif   --> unpack the .sif into a sandbox, return sandbox path
+      2. unpack + registry     --> pull .sif from registry, unpack into sandbox, return sandbox path
+      3. local .sif, no unpack --> return the .sif path directly
+      4. registry, no unpack   --> return "docker://<image>" so apptainer pulls at runtime
+    """
+    from spython.main import Client
+
+    if config.unpack_singularity:
+        unpacked_dir = Path("unpacked")
+        unpacked_dir.mkdir(exist_ok=True)
+
+        if resolved.is_local_sif:
+            # Use pre-built .sif directly, skip pulling from registry
+            image_path = resolved.image
+            base_cont = Path(resolved.image).stem
+        else:
+            # The incoming image string is of the format <repository>/<owner>/<image name>:<tag> e.g.
+            # hub.docker.com/reedcompbio/spras:latest
+            # Here we first produce a .sif image using the image name and tag (base_cont)
+            # and then expand that image into a sandbox directory. For example,
+            # hub.docker.com/reedcompbio/spras:latest --> spras_latest.sif --> ./spras_latest/
+            path_elements = resolved.image.split("/")
+            base_cont = path_elements[-1]
+            base_cont = base_cont.replace(":", "_")
+            sif_file = base_cont + ".sif"
+
+            # Adding 'docker://' to the container indicates this is a Docker image Singularity must convert
+            image_path = Client.pull('docker://' + resolved.image, name=str(unpacked_dir / sif_file))
+
+        base_cont_path = unpacked_dir / Path(base_cont)
+
+        # Check whether the directory for base_cont_path already exists. When running concurrent jobs, it's possible
+        # something else has already pulled/unpacked the container.
+        # Here, we expand the sif image from `image_path` to a directory indicated by `base_cont_path`
+        if not base_cont_path.exists():
+            Client.build(recipe=image_path, image=str(base_cont_path), sandbox=True, sudo=False)
+        print(f'Resolved singularity image to sandbox: {base_cont_path}', flush=True)
+        return base_cont_path  # sandbox directory
+
+    if resolved.is_local_sif:
+        # Local .sif without unpacking — use directly
+        print(f'Resolved singularity image to local .sif: {resolved.image}', flush=True)
+        return resolved.image
+
+    # No override, no unpacking — apptainer pulls and converts the Docker image at runtime
+    docker_uri = "docker://" + resolved.image
+    print(f'Resolved singularity image: {docker_uri}', flush=True)
+    return docker_uri
+
+
+def run_container_singularity(resolved: ResolvedImage, command: List[str], volumes: List[Tuple[PurePath, PurePath]], working_dir: str, out_dir: str, config: ProcessedContainerSettings, environment: Optional[dict[str, str]] = None):
     """
     Runs a command in the container using Singularity.
     Only available on Linux.
-    @param container: name of the DockerHub container without the 'docker://' prefix
+    @param resolved: the resolved container image (registry URI or local .sif path)
     @param command: command to run in the container
     @param volumes: a list of volumes to mount where each item is a (source, destination) tuple
     @param working_dir: the working directory in the container
@@ -383,40 +533,9 @@ def run_container_singularity(container: str, command: List[str], volumes: List[
     # https://docs.sylabs.io/guides/3.7/user-guide/environment_and_metadata.html#env-option
     singularity_options.extend(['--env', ",".join(env_to_items(environment))])
 
-    # Handle unpacking singularity image if needed. Potentially needed for running nested unprivileged containers
-    expanded_image = None
-    if config.config.container_settings.unpack_singularity:
-        # The incoming image string is of the format <repository>/<owner>/<image name>:<tag> e.g.
-        # hub.docker.com/reedcompbio/spras:latest
-        # Here we first produce a .sif image using the image name and tag (base_cont)
-        # and then expand that image into a sandbox directory. For example,
-        # hub.docker.com/reedcompbio/spras:latest --> spras_latest.sif --> ./spras_latest/
-        path_elements = container.split("/")
-        base_cont = path_elements[-1]
-        base_cont = base_cont.replace(":", "_").split(":")[0]
-        sif_file = base_cont + ".sif"
+    image_to_run = _prepare_singularity_image(resolved, config)
 
-        # To allow caching unpacked singularity images without polluting git on local runs,
-        # we move all of the unpacked image files into a `.gitignore`d folder.
-        unpacked_dir = Path("unpacked")
-        unpacked_dir.mkdir(exist_ok=True)
-
-        # Adding 'docker://' to the container indicates this is a Docker image Singularity must convert
-        image_path = Client.pull('docker://' + container, name=str(unpacked_dir / sif_file))
-
-        base_cont_path = unpacked_dir / Path(base_cont)
-
-        # Check whether the directory for base_cont_path already exists. When running concurrent jobs, it's possible
-        # something else has already pulled/unpacked the container.
-        # Here, we expand the sif image from `image_path` to a directory indicated by `base_cont_path`
-        if not base_cont_path.exists():
-            Client.build(recipe=image_path, image=str(base_cont_path), sandbox=True, sudo=False)
-        expanded_image = base_cont_path  # This is the sandbox directory
-
-    # If not using the expanded sandbox image, we still need to prepend the docker:// prefix
-    # so apptainer knows to pull and convert the image format from docker to apptainer.
-    image_to_run = expanded_image if expanded_image else "docker://" + container
-    if config.config.enable_profiling:
+    if config.enable_profiling:
         # We won't end up using the spython client if profiling is enabled because
         # we need to run everything manually to set up the cgroup
         # Build the apptainer run command, which gets passed to the cgroup wrapper script
@@ -452,7 +571,7 @@ def run_container_singularity(container: str, command: List[str], volumes: List[
 
 
 # Because this is called independently for each file, the same local path can be mounted to multiple volumes
-def prepare_volume(filename: Union[str, PurePath], volume_base: Union[str, PurePath]) -> Tuple[Tuple[PurePath, PurePath], str]:
+def prepare_volume(filename: Union[str, os.PathLike], volume_base: Union[str, PurePath], config: ProcessedContainerSettings) -> Tuple[Tuple[PurePath, PurePath], str]:
     """
     Makes a file on the local file system accessible within a container by mapping the local (source) path to a new
     container (destination) path and renaming the file to be relative to the destination path.
@@ -468,10 +587,10 @@ def prepare_volume(filename: Union[str, PurePath], volume_base: Union[str, PureP
     if not base_path.is_absolute():
         raise ValueError(f'Volume base must be an absolute path: {volume_base}')
 
-    if isinstance(filename, PurePath):
+    if isinstance(filename, os.PathLike):
         filename = str(filename)
 
-    filename_hash = hash_filename(filename, config.config.container_settings.hash_length)
+    filename_hash = hash_filename(filename, config.hash_length)
     dest = PurePosixPath(base_path, filename_hash)
 
     abs_filename = Path(filename).resolve()

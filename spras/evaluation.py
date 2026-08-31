@@ -2,7 +2,7 @@ import os
 import pickle as pkl
 from os import PathLike
 from pathlib import Path
-from typing import Dict, Iterable, Union
+from typing import Iterable, TypedDict, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -22,21 +22,25 @@ from spras.interactome import (
 )
 
 
+class GoldStandardDict(TypedDict):
+    label: str
+    node_files: list[str]
+    edge_files: list[str]
+    data_dir: str
+    dataset_labels: list[str]
+
 class Evaluation:
     NODE_ID = 'NODEID'
 
-    def __init__(self, gold_standard_dict: Dict):
-        self.label = None
-        self.datasets = None
-        self.node_table = None
-        self.mixed_edge_table = None
-        self.undirected_edge_table = None
-        self.directed_edge_table = None
-        self.load_files_from_dict(gold_standard_dict)
-        return
+    label: str
+    datasets: list[str]
+    node_table: pd.DataFrame
+    mixed_edge_table: pd.DataFrame
+    undirected_edge_table: pd.DataFrame
+    directed_edge_table: pd.DataFrame
 
     @staticmethod
-    def merge_gold_standard_input(gs_dict, gs_file):
+    def merge_gold_standard_input(gs_dict: GoldStandardDict, gs_file: str | os.PathLike):
         """
         Merge files listed for this gold standard dataset and write the dataset to disk
         @param gs_dict: gold standard dataset to process
@@ -45,7 +49,7 @@ class Evaluation:
         gs_dataset = Evaluation(gs_dict)
         gs_dataset.to_file(gs_file)
 
-    def to_file(self, file_name):
+    def to_file(self, file_name: str | os.PathLike):
         """
         Saves gold standard object to pickle file
         """
@@ -53,7 +57,7 @@ class Evaluation:
             pkl.dump(self, f)
 
     @staticmethod
-    def from_file(file_name):
+    def from_file(file_name: str | os.PathLike):
         """
         Loads gold standard object from a pickle file.
         Usage: gold_standard = Evaluation.from_file(pickle_file)
@@ -61,7 +65,7 @@ class Evaluation:
         with open(file_name, 'rb') as f:
             return pkl.load(f)
 
-    def load_files_from_dict(self, gold_standard_dict: Dict):
+    def __init__(self, gold_standard_dict: GoldStandardDict):
         """
         Loads gold standard files from gold_standard_dict, which is one gold standard dataset
         dictionary from the list in the config file with the fields in the config file.
@@ -157,9 +161,10 @@ class Evaluation:
         @param file_paths: list of file paths of pathway reconstruction algorithm outputs
         @param node_table: the gold standard nodes
         @return: A DataFrame with the following columns:
-                - 'Pathway': Path object corresponding to each pathway file
-                - 'Precision': Precision of predicted nodes vs. gold standard nodes
-                - 'Recall': Recall of predicted nodes vs. gold standard nodes
+
+        - 'Pathway': Path object corresponding to each pathway file
+        - 'Precision': Precision of predicted nodes vs. gold standard nodes
+        - 'Recall': Recall of predicted nodes vs. gold standard nodes
         """
         y_true = set(node_table['NODEID'])
         results = []
@@ -191,7 +196,7 @@ class Evaluation:
         for each algorithm.
 
         @param pr_df: Dataframe of calculated precision and recall for each pathway file.
-                      Must include a preprocessed 'Algorithm' column.
+        Must include a preprocessed 'Algorithm' column.
         @param output_file: the filename to save the precision and recall of each pathway
         @param output_png: the filename to plot the precision and recall of each pathway (not a PRC)
         @param title: The title to use for the plot
@@ -437,15 +442,17 @@ class Evaluation:
                 plt.close()
 
     @staticmethod
-    def pca_chosen_pathway(coordinates_files: list[Union[str, PathLike]], pathway_summary_file: str, output_dir: str):
+    def pca_chosen_pathway(coordinates_files: Iterable[Union[str, PathLike]], pathway_summary_file: str, output_dir: str):
         """
         Identifies the pathway closest to a specified highest kernel density estimated (KDE) peak based on PCA
         coordinates
         Calculates the Euclidean distance from each data point to the KDE peak, then selects the closest pathway as the
         representative pathway.
-        If there is more than one representative pathway, a tiebreaker will be used
-            1) choose smallest pathway (smallest number of edges and nodes)
-            2) end all be all, choose the first one based on name
+        If there is more than one representative pathway, a tiebreaker will be used:
+
+        1) choose smallest pathway (smallest number of edges and nodes)
+        2) end all be all, choose the first one based on name
+
         Returns a list of file paths for the representative pathway associated with the closest data point to the
         centroid.
 
@@ -488,20 +495,24 @@ class Evaluation:
         return rep_pathways
 
     @staticmethod
-    def edge_frequency_node_ensemble(node_table: pd.DataFrame, ensemble_files: list[Union[str, PathLike]], dataset_file: str) -> dict:
+    def edge_frequency_node_ensemble(node_table: pd.DataFrame, ensemble_files: Iterable[Union[str, PathLike]], dataset_file: str) -> dict:
         """
         Generates a dictionary of node ensembles using edge frequency data from a list of ensemble files.
         A list of ensemble files can contain an aggregated ensemble or algorithm-specific ensembles per dataset
 
         1. Prepare a set of default nodes (from the interactome and gold standard) with frequency 0,
-        ensuring all nodes are represented in the ensemble.
-            - Answers "Did the algorithm(s) select the correct nodes from the entire network?"
-            - It measures whether the algorithm(s) can distinguish relevant gold standard nodes
-            from the full "universe" of possible nodes present in the input network.
+           ensuring all nodes are represented in the ensemble.
+
+           - Answers "Did the algorithm(s) select the correct nodes from the entire network?"
+           - It measures whether the algorithm(s) can distinguish relevant gold standard nodes
+             from the full "universe" of possible nodes present in the input network.
+
         2. For each edge ensemble file:
-            a. Read edges and their frequencies.
-            b. Convert edges frequencies into node-level frequencies for Node1 and Node2.
-            c. Merge with the default node set and group by node, taking the maximum frequency per node.
+
+           a. Read edges and their frequencies.
+           b. Convert edges frequencies into node-level frequencies for Node1 and Node2.
+           c. Merge with the default node set and group by node, taking the maximum frequency per node.
+
         3. Store the resulting node-frequency ensemble under the corresponding ensemble source (label).
 
         If the interactome or gold standard table is empty, a ValueError is raised.
