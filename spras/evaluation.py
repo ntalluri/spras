@@ -414,7 +414,7 @@ class Evaluation:
                 Evaluation.nodes_visualize_precision_and_recall_plot(pr_df, output_file, output_png, title)
 
             else:
-                if aggregate_per_algorithm :
+                if aggregate_per_algorithm:
                     title = "Edge Evaluation PCA-Chosen Pathway Per Algorithm Precision and Recall Plot"
                 else:
                     title = "Edge Evaluation PCA-Chosen Pathway Across all Algorithms Precision and Recall Plot"
