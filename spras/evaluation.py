@@ -147,6 +147,24 @@ class Evaluation:
             # TODO: later iteration - update to make a self.node_table from the edge table
             # the node and edge files will go under the same dataset-gs pair folder
 
+    @staticmethod
+    def compute_precision_and_recall(y_true: set, y_pred: set) -> tuple[float, float]:
+        """
+        Computes precision and recall of a predicted set against a gold standard set.
+        Used for both node-level and edge-level evaluation.
+
+        @param y_true: the gold standard set of items (nodes or edges)
+        @param y_pred: the predicted set of items (nodes or edges)
+        @return: a tuple of (precision, recall)
+        """
+
+        all_items = y_true.union(y_pred)
+        y_true_binary = [1 if item in y_true else 0 for item in all_items]
+        y_pred_binary = [1 if item in y_pred else 0 for item in all_items]
+        # default to 0.0 if there is a divide by 0 error
+        precision = precision_score(y_true_binary, y_pred_binary, zero_division=0.0)
+        recall = recall_score(y_true_binary, y_pred_binary, zero_division=0.0)
+        return precision, recall
 
     @staticmethod
     def node_precision_and_recall(file_paths: Iterable[Union[str, PathLike]], node_table: pd.DataFrame) -> pd.DataFrame:
@@ -156,12 +174,11 @@ class Evaluation:
         This function takes a list of file paths corresponding to pathway reconstruction algorithm outputs,
         each formatted as a tab-separated file with columns 'Node1', 'Node2', 'Rank', and 'Direction'.
         It compares the set of predicted nodes (from both columns Node1 and Node2) to a provided gold standard node table
-        and computes precision and recall per file.
+        and gets a precision and recall per file.
 
         @param file_paths: list of file paths of pathway reconstruction algorithm outputs
         @param node_table: the gold standard nodes
         @return: A DataFrame with the following columns:
-
         - 'Pathway': Path object corresponding to each pathway file
         - 'Precision': Precision of predicted nodes vs. gold standard nodes
         - 'Recall': Recall of predicted nodes vs. gold standard nodes
@@ -171,19 +188,11 @@ class Evaluation:
         for f in file_paths:
             df = pd.read_table(f, sep='\t', header=0, usecols=['Node1', 'Node2'])
             y_pred = set(df['Node1']).union(set(df['Node2']))
-            all_nodes = y_true.union(y_pred)
-            y_true_binary = [1 if node in y_true else 0 for node in all_nodes]
-            y_pred_binary = [1 if node in y_pred else 0 for node in all_nodes]
-            # default to 0.0 if there is a divide by 0 error
-            # not using precision_recall_curve because thresholds are binary (0 or 1); rather we are directly
-            # calculating precision and recall per pathway
-            precision = precision_score(y_true_binary, y_pred_binary, zero_division=0.0)
-            recall = recall_score(y_true_binary, y_pred_binary, zero_division=0.0)
+            precision, recall = Evaluation.compute_precision_and_recall(y_true, y_pred)
             results.append({'Pathway': f, 'Precision': precision, 'Recall': recall})
 
         pr_df = pd.DataFrame(results)
         return pr_df
-
 
     @staticmethod
     def nodes_visualize_precision_and_recall_plot(pr_df: pd.DataFrame, output_file: str | PathLike, output_png: str | PathLike, title: str):
@@ -238,6 +247,8 @@ class Evaluation:
         pr_df.drop(columns=['Algorithm'], inplace=True)
         pr_df.to_csv(output_file, sep='\t', index=False)
 
+
+
     @staticmethod
     def edge_precision_and_recall(file_paths: Iterable[Union[str, PathLike]], mixed_edge_table: pd.DataFrame, directed_edge_table: pd.DataFrame, undirected_edge_table: pd.DataFrame) -> pd.DataFrame:
         """
@@ -245,51 +256,33 @@ class Evaluation:
 
         This function takes a list of file paths corresponding to pathway reconstruction algorithm outputs,
         each formatted as a tab-separated file with columns 'Node1', 'Node2', 'Rank', and 'Direction'.
-        It compares the set of predicted edges to the three provided gold standard edge tables and computes precision and recall per file.
+        It compares the set of predicted edges to the three provided gold standard edge tables and gets a precision and recall per file.
 
         @param file_paths: list of file paths of pathway reconstruction algorithm outputs
         @param mixed_edge_table: the gold standard edges that includes directed and undirected edges
         @param directed_edge_table: the gold standard edges that only includes directed edges
         @param undirected_edge_table: the gold standard edges that only includes undirected edges
         @return: A DataFrame with the following columns:
-                - 'Pathway': Path object corresponding to each pathway file
-                - 'Precision': Precision of predicted nodes vs. gold standard nodes
-                - 'Recall': Recall of predicted nodes vs. gold standard nodes
-                - 'Gold_Standard_Type': Which gold standard was used to calculate the precision and recall
+            - 'Pathway': Path object corresponding to each pathway file
+            - 'Precision': Precision of predicted nodes vs. gold standard nodes
+            - 'Recall': Recall of predicted nodes vs. gold standard nodes
+            - 'Gold_Standard_Type': Which gold standard was used to calculate the precision and recall
         """
 
-        y_true_mixed = set(map(tuple, mixed_edge_table[['Interactor1', 'Interactor2', 'Direction']].values))
-        y_true_directed = set(map(tuple, directed_edge_table[['Interactor1', 'Interactor2', 'Direction']].values))
-        y_true_undirected =  set(map(tuple, undirected_edge_table[['Interactor1', 'Interactor2', 'Direction']].values))
+        gold_standards = {
+            "mixed": set(map(tuple, mixed_edge_table[['Interactor1', 'Interactor2', 'Direction']].values)),
+            "directed": set(map(tuple, directed_edge_table[['Interactor1', 'Interactor2', 'Direction']].values)),
+            "undirected": set(map(tuple, undirected_edge_table[['Interactor1', 'Interactor2', 'Direction']].values)),
+        }
 
         results = []
         for f in file_paths:
             df = pd.read_table(f, sep='\t', header=0)
-            y_pred =  set(map(tuple, df[['Node1', 'Node2', 'Direction']].values))
+            y_pred = set(map(tuple, df[['Node1', 'Node2', 'Direction']].values))
 
-            all_edges_mixed = y_true_mixed.union(y_pred)
-            y_true_mixed_binary = [1 if edge in y_true_mixed else 0 for edge in all_edges_mixed]
-            y_pred_mixed_binary = [1 if edge in y_pred else 0 for edge in all_edges_mixed]
-            # default to 0.0 if there is a divide by 0 error
-            # not using precision_recall_curve because thresholds are binary (0 or 1); rather we are directly
-            # calculating precision and recall per pathway
-            precision_mixed = precision_score(y_true_mixed_binary, y_pred_mixed_binary, zero_division=0.0)
-            recall_mixed = recall_score(y_true_mixed_binary, y_pred_mixed_binary, zero_division=0.0)
-            results.append({'Pathway': f, 'Precision': precision_mixed, 'Recall': recall_mixed, 'Gold_Standard_Type': "mixed"})
-
-            all_edges_directed = y_true_directed.union(y_pred)
-            y_true_directed_binary = [1 if edge in y_true_directed else 0 for edge in all_edges_directed]
-            y_pred_directed_binary = [1 if edge in y_pred else 0 for edge in all_edges_directed]
-            precision_directed = precision_score(y_true_directed_binary, y_pred_directed_binary, zero_division=0.0)
-            recall_directed = recall_score(y_true_directed_binary, y_pred_directed_binary, zero_division=0.0)
-            results.append({'Pathway': f, 'Precision': precision_directed, 'Recall': recall_directed, 'Gold_Standard_Type': "directed"})
-
-            all_edges_undirected = y_true_undirected.union(y_pred)
-            y_true_undirected_binary = [1 if edge in y_true_undirected else 0 for edge in all_edges_undirected]
-            y_pred_undirected_binary = [1 if edge in y_pred else 0 for edge in all_edges_undirected]
-            precision_undirected = precision_score(y_true_undirected_binary, y_pred_undirected_binary, zero_division=0.0)
-            recall_undirected = recall_score(y_true_undirected_binary, y_pred_undirected_binary, zero_division=0.0)
-            results.append({'Pathway': f, 'Precision': precision_undirected, 'Recall': recall_undirected, 'Gold_Standard_Type': "undirected"})
+            for gold_standard_type, y_true in gold_standards.items():
+                precision, recall = Evaluation.compute_precision_and_recall(y_true, y_pred)
+                results.append({'Pathway': f, 'Precision': precision, 'Recall': recall, 'Gold_Standard_Type': gold_standard_type})
 
         pr_df = pd.DataFrame(results)
         return pr_df
