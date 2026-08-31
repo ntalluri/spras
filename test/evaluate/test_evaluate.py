@@ -118,9 +118,9 @@ class TestEvaluate:
         assert edge_output_png.exists()
 
     def test_node_precision_recall_pca_chosen_pathway(self):
-        node_output_file = Path(OUT_DIR + 'pr-per-pathway-pca-chosen_nodes.txt')
+        node_output_file = Path(OUT_DIR + 'pr-per-pathway-pca-chosen-nodes.txt')
         node_output_file.unlink(missing_ok=True)
-        node_output_png = Path(OUT_DIR + 'pr-per-pathway-pca-chosen_nodes.png')
+        node_output_png = Path(OUT_DIR + 'pr-per-pathway-pca-chosen-nodes.png')
         node_output_png.unlink(missing_ok=True)
         output_coordinates = Path(OUT_DIR + 'pca-coordinates.tsv')
         output_coordinates.unlink(missing_ok=True)
@@ -142,9 +142,9 @@ class TestEvaluate:
         assert node_output_png.exists()
 
     def test_edge_precision_recall_pca_chosen_pathway(self):
-        edge_output_file = Path(OUT_DIR + 'pr-per-pathway-pca-chosen_edges.txt')
+        edge_output_file = Path(OUT_DIR + 'pr-per-pathway-pca-chosen-edges.txt')
         edge_output_file.unlink(missing_ok=True)
-        edge_output_png = Path(OUT_DIR + 'pr-per-pathway-pca-chosen_edges.png')
+        edge_output_png = Path(OUT_DIR + 'pr-per-pathway-pca-chosen-edges.png')
         edge_output_png.unlink(missing_ok=True)
         output_coordinates = Path(OUT_DIR + 'pca-coordinates.tsv')
         output_coordinates.unlink(missing_ok=True)

@@ -322,7 +322,7 @@ class Evaluation:
             )
 
         pr_df.sort_values(by=['Algorithm', 'Gold_Standard_Type', 'Recall', 'Pathway'], axis=0, ascending=True, inplace=True)
-        # TODO: fix the layout of the output png
+
 
         gs_types = pr_df["Gold_Standard_Type"].unique().tolist()
         fig, axes = plt.subplots(1, len(gs_types), figsize=(6 * len(gs_types), 5))
@@ -419,7 +419,7 @@ class Evaluation:
                 Evaluation.nodes_visualize_precision_and_recall_plot(pr_df, output_file, output_png, title)
 
             else:
-                if aggregate_per_algorithm :
+                if aggregate_per_algorithm:
                     title = "Edge Evaluation PCA-Chosen Pathway Per Algorithm Precision and Recall Plot"
                 else:
                     title = "Edge Evaluation PCA-Chosen Pathway Across all Algorithms Precision and Recall Plot"
