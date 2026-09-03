@@ -506,7 +506,7 @@ rule evaluation_pca_chosen_nodes:
         node_table = Evaluation.from_file(input.node_gold_standard_file).node_table
         pca_chosen_pathway = Evaluation.pca_chosen_pathway(input.pca_coordinates_file, input.pathway_summary_file, out_dir)
         pr_df = Evaluation.node_precision_and_recall(pca_chosen_pathway, node_table)
-        Evaluation.precision_and_recall_pca_chosen_pathway(pr_df, output.node_pca_chosen_pr_file, output.node_pca_chosen_pr_png)
+        Evaluation.pca_based_param_selection(pr_df, output.node_pca_chosen_pr_file, output.node_pca_chosen_pr_png)
 
 rule evaluation_pca_chosen_edges:
     input: 
@@ -520,9 +520,10 @@ rule evaluation_pca_chosen_edges:
         mixed_edge_table = Evaluation.from_file(input.edge_gold_standard_file).mixed_edge_table
         undirected_edge_table = Evaluation.from_file(input.edge_gold_standard_file).undirected_edge_table
         directed_edge_table = Evaluation.from_file(input.edge_gold_standard_file).directed_edge_table
+        
         pca_chosen_pathway = Evaluation.pca_chosen_pathway(input.pca_coordinates_file, input.pathway_summary_file, out_dir)
         pr_df = Evaluation.edge_precision_and_recall(pca_chosen_pathway, mixed_edge_table, directed_edge_table, undirected_edge_table)
-        Evaluation.precision_and_recall_pca_chosen_pathway(pr_df, output.edge_pca_chosen_pr_file, output.edge_pca_chosen_pr_png, edge_evaluation=True)
+        Evaluation.pca_based_param_selection(pr_df, output.edge_pca_chosen_pr_file, output.edge_pca_chosen_pr_png, edge_evaluation=True)
 
 # Returns pca coordinates for a specific algorithm and dataset
 def collect_pca_coordinates_per_algo_per_dataset(wildcards):
@@ -543,7 +544,7 @@ rule evaluation_per_algo_pca_chosen_nodes:
         node_table = Evaluation.from_file(input.node_gold_standard_file).node_table
         pca_chosen_pathways = Evaluation.pca_chosen_pathway(input.pca_coordinates_files, input.pathway_summary_file, out_dir)
         pr_df = Evaluation.node_precision_and_recall(pca_chosen_pathways, node_table)
-        Evaluation.precision_and_recall_pca_chosen_pathway(pr_df, output.node_pca_chosen_pr_file, output.node_pca_chosen_pr_png, include_aggregate_algo_eval)
+        Evaluation.pca_based_param_selection(pr_df, output.node_pca_chosen_pr_file, output.node_pca_chosen_pr_png, include_aggregate_algo_eval)
 
 rule evaluation_per_algo_pca_chosen_edges:
     input: 
@@ -560,8 +561,7 @@ rule evaluation_per_algo_pca_chosen_edges:
         
         pca_chosen_pathways = Evaluation.pca_chosen_pathway(input.pca_coordinates_files, input.pathway_summary_file, out_dir)
         pr_df = Evaluation.edge_precision_and_recall(pca_chosen_pathways, mixed_edge_table, directed_edge_table, undirected_edge_table)
-        
-        Evaluation.precision_and_recall_pca_chosen_pathway(pr_df, output.edge_pca_chosen_pr_file, output.edge_pca_chosen_pr_png, include_aggregate_algo_eval, edge_evaluation=True)
+        Evaluation.pca_based_param_selection(pr_df, output.edge_pca_chosen_pr_file, output.edge_pca_chosen_pr_png, include_aggregate_algo_eval, edge_evaluation=True)
 
 # Return the dataset pickle file for a specific dataset
 def get_dataset_pickle_file(wildcards):

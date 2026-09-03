@@ -248,7 +248,6 @@ class Evaluation:
         pr_df.to_csv(output_file, sep='\t', index=False)
 
 
-
     @staticmethod
     def edge_precision_and_recall(file_paths: Iterable[Union[str, PathLike]], mixed_edge_table: pd.DataFrame, directed_edge_table: pd.DataFrame, undirected_edge_table: pd.DataFrame) -> pd.DataFrame:
         """
@@ -379,60 +378,6 @@ class Evaluation:
             # which indicates a deeper issue in the workflow setup.
             raise ValueError("No pathways were provided to evaluate and visulize on. This likely means no algorithms or parameter combinations were run.")
 
-    @staticmethod
-    def precision_and_recall_pca_chosen_pathway(pr_df: pd.DataFrame, output_file: str | PathLike, output_png: str | PathLike, aggregate_per_algorithm: bool = False, edge_evaluation: bool = False):
-        """
-
-        Function for visualizing the precision and recall of the single parameter combination selected via PCA,
-        either for each algorithm individually or one combination shared across all algorithms. Each point represents
-        a pathway reconstruction corresponding to the PCA-selected parameter combination.
-
-        If `aggregate_per_algorithm` is True, the output_png includes a pca chosen pathway per algorithm and titled accordingly.
-
-        If `edge_evaluation` is True, the output PNG shows performance across all three edge gold standards;
-        if False, the output PNG shows evaluation for the single node gold standard.
-
-        @param pr_df: Dataframe of calculated precision and recall for each pathway file
-        @param output_file: the filename to save the precision and recall of each pathway
-        @param output_png: the filename to plot the precision and recall of each pathway (not a PRC)
-        @param aggregate_per_algorithm: Boolean indicating if this function is used per algorithm (Default False)
-        @param edge_evaluation: Boolean indicating if this function is used for creating edge_evaluation plots (Default False)
-        """
-        # TODO update to add in the pathways for the algorithms that do not provide a pca chosen pathway https://github.com/Reed-CompBio/spras/issues/341
-
-        if not pr_df.empty:
-            pr_df['Algorithm'] = pr_df['Pathway'].apply(lambda p: Path(p).parent.name.split('-')[1])
-
-            if not edge_evaluation:
-                if aggregate_per_algorithm:
-                    title = "Node Evaluation PCA-Chosen Pathway Per Algorithm Precision and Recall Plot"
-                else:
-                    title = "Node Evaluation PCA-Chosen Pathway Across all Algorithms Precision and Recall Plot"
-
-                Evaluation.nodes_visualize_precision_and_recall_plot(pr_df, output_file, output_png, title)
-
-            else:
-                if aggregate_per_algorithm:
-                    title = "Edge Evaluation PCA-Chosen Pathway Per Algorithm Precision and Recall Plot"
-                else:
-                    title = "Edge Evaluation PCA-Chosen Pathway Across all Algorithms Precision and Recall Plot"
-
-                Evaluation.edges_visualize_precision_and_recall_plot(pr_df, output_file, output_png, title)
-
-
-        else:
-            # Edge case: if all algorithms chosen use only 1 parameter combination
-            # TODO: once functions are separated, update to be a warning
-            # See https://github.com/Reed-CompBio/spras/issues/331
-            pr_df = pd.DataFrame(columns=['Pathway', 'Precision', 'Recall'])
-            pr_df.to_csv(output_file, sep='\t', index=False)
-            if output_png is not None:
-                plt.figure(figsize=(10, 7))
-                plt.plot([], [], label="No Pathways Given")
-                plt.title("Empty PCA-Chosen Precision and Recall Plot")
-                plt.legend()
-                plt.savefig(output_png)
-                plt.close()
 
     @staticmethod
     def pca_chosen_pathway(coordinates_files: Iterable[Union[str, PathLike]], pathway_summary_file: str, output_dir: str):
@@ -486,6 +431,64 @@ class Evaluation:
             rep_pathways.append(rep_pathway)
 
         return rep_pathways
+
+
+    @staticmethod
+    def pca_based_param_selection(pr_df: pd.DataFrame, output_file: str | PathLike, output_png: str | PathLike, aggregate_per_algorithm: bool = False, edge_evaluation: bool = False):
+        """
+        This is the main function that is the driver of PCA-Based Representative Parameter Selection.
+
+        This is the function for calling the visualizations for the precision and recall of the representative parameter combination chosen via PCA,
+        either one combination chosen for each algorithm individually or one combination chosen across all algorithms.
+        Each point represents a pathway reconstruction corresponding to the PCA-selected parameter combination.
+
+        If `aggregate_per_algorithm` is True, the output_png includes a pca chosen pathway per algorithm and titled accordingly.
+
+        If `edge_evaluation` is True, the output PNG shows performance across all three versions of the edge gold standard;
+        if False, the output PNG shows evaluation for the single node gold standard.
+
+        @param pr_df: Dataframe of calculated precision and recall for each pca chosen pathway file
+        @param output_file: the filename to save the precision and recall of each pathway
+        @param output_png: the filename to plot the precision and recall of each pathway (not a PRC)
+        @param aggregate_per_algorithm: Boolean indicating if this function is used per algorithm (Default False)
+        @param edge_evaluation: Boolean indicating if this function is used for creating edge_evaluation plots (Default False)
+        """
+        # TODO update to add in the pathways for the algorithms that do not provide a pca chosen pathway https://github.com/Reed-CompBio/spras/issues/341
+
+        if not pr_df.empty:
+            pr_df['Algorithm'] = pr_df['Pathway'].apply(lambda p: Path(p).parent.name.split('-')[1])
+
+            if not edge_evaluation:
+                if aggregate_per_algorithm:
+                    title = "Node Evaluation PCA-Chosen Pathway Per Algorithm Precision and Recall Plot"
+                else:
+                    title = "Node Evaluation PCA-Chosen Pathway Across all Algorithms Precision and Recall Plot"
+
+                Evaluation.nodes_visualize_precision_and_recall_plot(pr_df, output_file, output_png, title)
+
+            else:
+                if aggregate_per_algorithm:
+                    title = "Edge Evaluation PCA-Chosen Pathway Per Algorithm Precision and Recall Plot"
+                else:
+                    title = "Edge Evaluation PCA-Chosen Pathway Across all Algorithms Precision and Recall Plot"
+
+                Evaluation.edges_visualize_precision_and_recall_plot(pr_df, output_file, output_png, title)
+
+
+        else:
+            # Edge cases: if all algorithms chosen use only 1 parameter combination, all of the outputs are empty or there is only a single parameter combination
+            # TODO: once functions are separated, update to be a warning
+            # See https://github.com/Reed-CompBio/spras/issues/331
+            pr_df = pd.DataFrame(columns=['Pathway', 'Precision', 'Recall'])
+            pr_df.to_csv(output_file, sep='\t', index=False)
+            if output_png is not None:
+                plt.figure(figsize=(10, 7))
+                plt.plot([], [], label="No Pathways Given")
+                plt.title("Empty PCA-Chosen Precision and Recall Plot")
+                plt.legend()
+                plt.savefig(output_png)
+                plt.close()
+
 
     @staticmethod
     def edge_frequency_node_ensemble(node_table: pd.DataFrame, ensemble_files: Iterable[Union[str, PathLike]], dataset_file: str) -> dict:
