@@ -85,6 +85,9 @@ class TestEvaluate:
             Evaluation.precision_and_recall_per_pathway(pr_df, output_file, output_png)
 
     def test_node_precision_recall_pca_chosen_pathway_not_provided(self):
+        # Empty edge case when no PCA-chosen pathways exist:
+        # either every algorithm ran a single parameter combination or all pathway outputs were empty.
+
         node_output_file = Path( OUT_DIR + 'pr-per-pathway-pca-chosen-not-provided_nodes.txt')
         node_output_file.unlink(missing_ok=True)
         node_output_png = Path(OUT_DIR + 'pr-per-pathway-pca-chosen-not-provided_nodes.png')
@@ -102,6 +105,9 @@ class TestEvaluate:
         assert node_output_png.exists()
 
     def test_edge_precision_recall_pca_chosen_pathway_not_provided(self):
+        # Empty edge case when no PCA-chosen pathways exist:
+        # either every algorithm ran a single parameter combination or all pathway outputs were empty.
+
         edge_output_file = Path( OUT_DIR + 'pr-per-pathway-pca-chosen-not-provided_edges.txt')
         edge_output_file.unlink(missing_ok=True)
         edge_output_png = Path(OUT_DIR + 'pr-per-pathway-pca-chosen-not-provided_edges.png')
@@ -136,9 +142,7 @@ class TestEvaluate:
         Evaluation.precision_and_recall_pca_chosen_pathway(pr_df, node_output_file, node_output_png, True)
 
         chosen = pd.read_csv(node_output_file, sep='\t', header=0).round(8)
-        print(chosen)
         expected = pd.read_csv(EXPECT_DIR + 'expected-pr-per-pathway-pca-chosen-nodes.txt', sep='\t',  header=0).round(8)
-        print(expected)
 
         assert chosen.equals(expected)
         assert node_output_png.exists()

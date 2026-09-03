@@ -443,7 +443,9 @@ class Evaluation:
                 Evaluation.edges_visualize_precision_and_recall_plot(pr_df, output_file, output_png, title)
 
         else:
-            # Edge cases: if all algorithms chosen use only 1 parameter combination, all of the outputs are empty or there is only a single parameter combination
+            # Empty when no PCA-chosen pathways exist: either every algorithm ran a single
+            # parameter combination or all pathway outputs were empty.
+
             # TODO: once functions are separated, update to be a warning
             # See https://github.com/Reed-CompBio/spras/issues/331
             pr_df = pd.DataFrame(columns=['Pathway', 'Precision', 'Recall'])
