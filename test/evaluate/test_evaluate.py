@@ -96,7 +96,7 @@ class TestEvaluate:
         file_paths = []
 
         pr_df = Evaluation.node_precision_and_recall(file_paths, GS_NODE_TABLE)
-        Evaluation.precision_and_recall_pca_chosen_pathway(pr_df, node_output_file, node_output_png)
+        Evaluation.pca_based_param_selection(pr_df, node_output_file, node_output_png)
 
         node_output = pd.read_csv(node_output_file, sep='\t', header=0).round(8)
         expected = pd.read_csv(EXPECT_DIR + 'expected-pr-pca-chosen-not-provided.txt', sep='\t',  header=0).round(8)
@@ -116,7 +116,7 @@ class TestEvaluate:
         file_paths = []
 
         pr_df = Evaluation.edge_precision_and_recall(file_paths, GS_MIXED_EDGE_TABLE, GS_DIRECTED_EDGE_TABLE, GS_UNDIRECTED_EDGE_TABLE)
-        Evaluation.precision_and_recall_pca_chosen_pathway(pr_df, edge_output_file, edge_output_png)
+        Evaluation.pca_based_param_selection(pr_df, edge_output_file, edge_output_png)
         edge_output = pd.read_csv(edge_output_file, sep='\t', header=0).round(8)
         expected = pd.read_csv(EXPECT_DIR + 'expected-pr-pca-chosen-not-provided.txt', sep='\t',  header=0).round(8)
 
@@ -139,7 +139,7 @@ class TestEvaluate:
 
         pathway = Evaluation.pca_chosen_pathway([output_coordinates], SUMMARY_FILE, INPUT_DIR)
         pr_df = Evaluation.node_precision_and_recall(pathway, GS_NODE_TABLE)
-        Evaluation.precision_and_recall_pca_chosen_pathway(pr_df, node_output_file, node_output_png, True)
+        Evaluation.pca_based_param_selection(pr_df, node_output_file, node_output_png, True)
 
         chosen = pd.read_csv(node_output_file, sep='\t', header=0).round(8)
         expected = pd.read_csv(EXPECT_DIR + 'expected-pr-per-pathway-pca-chosen-nodes.txt', sep='\t',  header=0).round(8)
@@ -163,7 +163,7 @@ class TestEvaluate:
 
         pathway = Evaluation.pca_chosen_pathway([output_coordinates], SUMMARY_FILE, INPUT_DIR)
         pr_df = Evaluation.edge_precision_and_recall(pathway, GS_MIXED_EDGE_TABLE, GS_DIRECTED_EDGE_TABLE, GS_UNDIRECTED_EDGE_TABLE)
-        Evaluation.precision_and_recall_pca_chosen_pathway(pr_df, edge_output_file, edge_output_png, True, True)
+        Evaluation.pca_based_param_selection(pr_df, edge_output_file, edge_output_png, True, True)
 
         chosen = pd.read_csv(edge_output_file, sep='\t', header=0).round(8)
         expected = pd.read_csv(EXPECT_DIR + 'expected-pr-per-pathway-pca-chosen-edges.txt', sep='\t',  header=0).round(8)
