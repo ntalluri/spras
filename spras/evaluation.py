@@ -349,35 +349,6 @@ class Evaluation:
         pr_df.drop(columns=['Algorithm'], inplace=True)
         pr_df.to_csv(output_file, sep='\t', index=False)
 
-    @staticmethod
-    def precision_and_recall_per_pathway(pr_df: pd.DataFrame, output_file: str | PathLike, output_png: str | PathLike, aggregate_per_algorithm: bool = False):
-        """
-        Function for visualizing per pathway precision and recall across all algorithms. Each point in the plot represents
-        a single pathway reconstruction.
-
-        If `aggregate_per_algorithm` is set to True, each plot is restricted to a single algorithm and titled accordingly.
-
-        @param pr_df: Dataframe of calculated precision and recall for each pathway file
-        @param output_file: the filename to save the precision and recall of each pathway
-        @param output_png: the filename to plot the precision and recall of each pathway (not a PRC)
-        @param aggregate_per_algorithm: Boolean indicating if function is used per algorithm (Default False)
-        """
-        if not pr_df.empty:
-            pr_df['Algorithm'] = pr_df['Pathway'].apply(lambda p: Path(p).parent.name.split('-')[1])
-
-            if aggregate_per_algorithm:
-                # Guaranteed to only have one algorithm in Algorithm column
-                title = f"Precision and Recall Plot Per Pathway for {pr_df['Algorithm'].unique()[0].capitalize()}"
-            else:
-                title = "Precision and Recall Plot Per Pathway Per Algorithm"
-
-            Evaluation.nodes_visualize_precision_and_recall_plot(pr_df, output_file, output_png, title)
-
-        else:
-            # this block should never be reached — having 0 pathways implies that no algorithms or parameter combinations were run,
-            # which indicates a deeper issue in the workflow setup.
-            raise ValueError("No pathways were provided to evaluate and visulize on. This likely means no algorithms or parameter combinations were run.")
-
 
     @staticmethod
     def pca_chosen_pathway(coordinates_files: Iterable[Union[str, PathLike]], pathway_summary_file: str, output_dir: str):
@@ -436,13 +407,10 @@ class Evaluation:
     @staticmethod
     def pca_based_param_selection(pr_df: pd.DataFrame, output_file: str | PathLike, output_png: str | PathLike, aggregate_per_algorithm: bool = False, edge_evaluation: bool = False):
         """
-        This is the main function that is the driver of PCA-Based Representative Parameter Selection.
+        Function for calling the visualizations for the precision and recall of the representative parameter combination chosen via PCA.
 
-        This is the function for calling the visualizations for the precision and recall of the representative parameter combination chosen via PCA,
-        either one combination chosen for each algorithm individually or one combination chosen across all algorithms.
-        Each point represents a pathway reconstruction corresponding to the PCA-selected parameter combination.
-
-        If `aggregate_per_algorithm` is True, the output_png includes a pca chosen pathway per algorithm and titled accordingly.
+        If `aggregate_per_algorithm` is True, the output PNG includes a pca chosen pathway per algorithm and titled accordingly.
+        if False, the output PNG includes only one combination chosen across all algorithms and titled accordingly.
 
         If `edge_evaluation` is True, the output PNG shows performance across all three versions of the edge gold standard;
         if False, the output PNG shows evaluation for the single node gold standard.
@@ -473,7 +441,6 @@ class Evaluation:
                     title = "Edge Evaluation PCA-Chosen Pathway Across all Algorithms Precision and Recall Plot"
 
                 Evaluation.edges_visualize_precision_and_recall_plot(pr_df, output_file, output_png, title)
-
 
         else:
             # Edge cases: if all algorithms chosen use only 1 parameter combination, all of the outputs are empty or there is only a single parameter combination
@@ -659,3 +626,31 @@ class Evaluation:
         complete_df.to_csv(output_file, index=False, sep='\t')
 
 
+    @staticmethod
+    def precision_and_recall_per_pathway(pr_df: pd.DataFrame, output_file: str | PathLike, output_png: str | PathLike, aggregate_per_algorithm: bool = False):
+        """
+        Function for visualizing per pathway precision and recall across all algorithms. Each point in the plot represents
+        a single pathway reconstruction.
+
+        If `aggregate_per_algorithm` is set to True, each plot is restricted to a single algorithm and titled accordingly.
+
+        @param pr_df: Dataframe of calculated precision and recall for each pathway file
+        @param output_file: the filename to save the precision and recall of each pathway
+        @param output_png: the filename to plot the precision and recall of each pathway (not a PRC)
+        @param aggregate_per_algorithm: Boolean indicating if function is used per algorithm (Default False)
+        """
+        if not pr_df.empty:
+            pr_df['Algorithm'] = pr_df['Pathway'].apply(lambda p: Path(p).parent.name.split('-')[1])
+
+            if aggregate_per_algorithm:
+                # Guaranteed to only have one algorithm in Algorithm column
+                title = f"Precision and Recall Plot Per Pathway for {pr_df['Algorithm'].unique()[0].capitalize()}"
+            else:
+                title = "Precision and Recall Plot Per Pathway Per Algorithm"
+
+            Evaluation.nodes_visualize_precision_and_recall_plot(pr_df, output_file, output_png, title)
+
+        else:
+            # this block should never be reached — having 0 pathways implies that no algorithms or parameter combinations were run,
+            # which indicates a deeper issue in the workflow setup.
+            raise ValueError("No pathways were provided to evaluate and visulize on. This likely means no algorithms or parameter combinations were run.")
